@@ -1,0 +1,7 @@
+spec:
+  endpoints:
+  - interval: 15s
+    targetPort: 8080
+    path: /actuator/prometheus
+  selector:
+    app: ${project.artifactId}

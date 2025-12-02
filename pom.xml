@@ -1,0 +1,265 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.example</groupId>
+	<artifactId>cpu-consumer-springboot</artifactId>
+	<version>0.1.0</version>
+	<packaging>jar</packaging>
+
+	<properties>
+		<java.version>17</java.version>
+		<springboot.version>3.5.2</springboot.version>
+		<springcloud.version>2025.0.0</springcloud.version>
+		<springdoc.version>2.2.0</springdoc.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+
+			<dependency>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-dependencies</artifactId>
+				<version>${springboot.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${springcloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<version>${springboot.version}</version>
+				<configuration>
+					<profiles>
+						<profile>${deployment.mode}</profile>
+					</profiles>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>repackage</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+
+	<profiles>
+		<!-- Local deployment -->
+		<profile>
+			<id>local</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+			</activation>
+			<properties>
+				<deployment.mode>local</deployment.mode>
+			</properties>
+			<dependencies>
+				<!-- Developer tools, to be clean -->
+				<!-- <dependency>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-devtools</artifactId>
+					<optional>true</optional>
+				</dependency> -->
+
+				<!-- Spring Admin Client -->
+				<!-- <dependency>
+					<groupId>de.codecentric</groupId>
+					<artifactId>spring-boot-admin-starter-client</artifactId>
+					<version>3.0.2</version>
+				</dependency>
+				<dependency>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-security</artifactId>
+				</dependency> -->
+
+			</dependencies>
+		</profile>
+
+		<!-- Deployment on k8s -->
+		<profile>
+			<id>kubernetes</id>
+			<properties>
+				<jkube-plugin.version>1.18.1</jkube-plugin.version>
+				<!--jkube.domain>minikube.com</jkube.domain-->
+				<jkube.createExternalUrls>true</jkube.createExternalUrls>
+				<jkube.enricher.jkube-ingress.targetApiVersion>networking.k8s.io/v1</jkube.enricher.jkube-ingress.targetApiVersion>
+				<deployment.mode>kubernetes</deployment.mode>
+			</properties>
+
+			<dependencies>
+				<dependency>
+					<groupId>org.springframework.cloud</groupId>
+					<artifactId>spring-cloud-starter-bootstrap</artifactId>
+				</dependency>
+				<dependency>
+					<groupId>org.springframework.cloud</groupId>
+					<artifactId>spring-cloud-starter-kubernetes-client-config</artifactId>
+				</dependency>
+			</dependencies>
+
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.eclipse.jkube</groupId>
+						<artifactId>kubernetes-maven-plugin</artifactId>
+						<version>${jkube-plugin.version}</version>
+						<configuration>
+							<mappings>
+								<mapping>
+									<kind>ServiceMonitor</kind>
+									<filenameTypes>smon</filenameTypes>
+									<apiVersion>monitoring.coreos.com/v1</apiVersion>
+								</mapping>
+							</mappings>
+							<images>
+								<image>
+									<name>quay.io/rgordill/${project.artifactId}:${project.version}</name>
+									<build>
+										<from>quay.io/jkube/jkube-java:0.0.26</from>
+										<assembly>
+											<targetDir>/deployments</targetDir>
+										</assembly>
+									</build>
+								</image>
+							</images>
+							<resources>
+								<annotations>
+									<ingress>
+										<property>
+											<name>route.openshift.io/termination</name>
+											<value>edge</value>
+										</property>
+									</ingress>
+								</annotations>
+								<services>
+									<service>
+										<name>${project.artifactId}</name>
+										<ports>
+											<port>
+												<name>http</name>
+												<protocol>TCP</protocol>
+												<port>8080</port>
+												<targetPort>8080</targetPort>
+											</port>
+										</ports>
+									</service>
+								</services>
+								<ingress>
+									<!--ingressClassName>openshift-default</ingressClassName-->
+									<ingressRules>
+										<ingressRule>
+											<host></host>
+											<paths>
+												<path>
+													<pathType>Prefix</pathType>
+													<path>/</path>
+													<serviceName>${project.artifactId}</serviceName>
+													<servicePort>8080</servicePort>
+												</path>
+											</paths>
+										</ingressRule>
+									</ingressRules>
+								</ingress>
+								<serviceAccounts>
+									<serviceAccount>
+										<name>${project.artifactId}</name>
+										<deploymentRef>${project.artifactId}</deploymentRef>
+									</serviceAccount>
+								</serviceAccounts>
+								<configMap>
+									<name>${project.artifactId}-config</name>
+									<entries>
+										<entry>
+											<name>${project.artifactId}.properties</name>
+											<file>src/main/resources/application.properties</file>
+										</entry>
+										<entry>
+											<file>src/main/resources/logback.xml</file>
+										</entry>
+									</entries>
+								</configMap>
+								<controller>
+									<replicas>1</replicas>
+									<imagePullPolicy>Always</imagePullPolicy>
+									<containerResources>
+										<requests>
+											<memory>1024Mi</memory>
+											<cpu>1</cpu>
+										</requests>
+										<limits>
+											<memory>1024Mi</memory>
+											<cpu>5</cpu>
+										</limits>
+									</containerResources>
+									<volumes>
+										<volume>
+											<name>config-volume</name>
+											<type>configMap</type>
+											<configMapName>${project.artifactId}-config</configMapName>
+											<mounts>
+												<mount>/opt/jboss/etc</mount>
+											</mounts>
+										</volume>
+									</volumes>
+									<env>
+										<!-- disable jolokia -->
+										<AB_JOLOKIA_OFF>true</AB_JOLOKIA_OFF>
+										<JAVA_ARGS>
+											--spring.profiles.active=${deployment.mode}
+											--spring.cloud.kubernetes.config.name=${project.artifactId}-config
+										</JAVA_ARGS>
+									</env>
+								</controller>
+							</resources>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+
+</project>
